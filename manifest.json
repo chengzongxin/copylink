@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "图片链接复制器",
+  "version": "1.0",
+  "description": "当鼠标悬浮在图片上时，显示复制链接按钮",
+  "permissions": [
+    "clipboardWrite",
+    "activeTab"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+} 
