@@ -1,12 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "图片链接复制器",
+  "name": "图片链接复制工具",
   "version": "1.0",
-  "description": "当鼠标悬浮在图片上时，显示复制链接按钮",
+  "description": "鼠标悬停在图片上时显示复制链接按钮，并记录复制的链接",
   "permissions": [
-    "clipboardWrite",
-    "activeTab"
+    "activeTab",
+    "clipboardWrite"
   ],
+  "action": {
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
