@@ -41,15 +41,20 @@ function createCopyButton() {
         pointerEvents: 'auto',
         transition: 'all 0.2s ease',
         opacity: '0',
-        transform: 'translateY(-10px)'
+        transform: 'translateY(-10px)',
+        minWidth: '70px' // 确保按钮宽度不会因为文字变化而改变
     });
 
     // 添加悬停效果
     button.addEventListener('mouseenter', () => {
-        button.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        if (button.innerHTML === '复制链接') {
+            button.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        }
     });
     button.addEventListener('mouseleave', () => {
-        button.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        if (button.innerHTML === '复制链接') {
+            button.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        }
     });
 
     return button;
@@ -406,6 +411,14 @@ function handleCopyClick(img) {
         event.preventDefault();
         event.stopPropagation();
 
+        // 获取按钮元素
+        const button = img._buttonContainer.querySelector('.copy-link-button');
+        
+        // 如果已经复制过，直接返回
+        if (button.innerHTML === '已复制') {
+            return;
+        }
+
         // 查找父级a标签
         const parentAnchor = findParentAnchor(img);
         if (parentAnchor && parentAnchor.href) {
@@ -421,8 +434,14 @@ function handleCopyClick(img) {
                 log('已复制图片链接: ' + img.src);
             } else {
                 log('未找到可复制的链接', 'warn');
+                return;
             }
         }
+
+        // 修改按钮文字和样式
+        button.innerHTML = '已复制';
+        button.style.backgroundColor = 'rgba(76, 175, 80, 0.8)'; // 绿色背景
+
     } catch (error) {
         log('处理复制点击事件时出错', error, 'error');
     }
