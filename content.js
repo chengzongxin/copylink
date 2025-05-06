@@ -134,6 +134,10 @@ function createNotepad() {
         // 添加清空按钮事件
         document.getElementById('clear-notepad').addEventListener('click', () => {
             content.innerHTML = '';
+            // 清空存储中的链接
+            chrome.storage.sync.remove(['savedLinks'], function() {
+                log('存储中的链接已清空');
+            });
             log('记事本已清空');
         });
 
@@ -200,6 +204,9 @@ function createNotepad() {
             el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
         }
 
+        // 加载保存的链接
+        loadLinksFromStorage();
+
         return { notepad, content };
     } catch (error) {
         log('创建记事本失败: ' + error.message, 'error');
@@ -231,8 +238,40 @@ function hideNotepad() {
     }
 }
 
+// 保存链接到存储
+function saveLinksToStorage(links) {
+    try {
+        chrome.storage.sync.set({ 'savedLinks': links }, function() {
+            log('链接已保存到存储');
+        });
+    } catch (error) {
+        log('保存链接到存储失败: ' + error.message, 'error');
+    }
+}
+
+// 从存储加载链接
+function loadLinksFromStorage() {
+    try {
+        chrome.storage.sync.get(['savedLinks'], function(result) {
+            if (result.savedLinks && result.savedLinks.length > 0) {
+                log('从存储加载了 ' + result.savedLinks.length + ' 个链接');
+                // 清空当前记事本内容
+                if (window.ImageCopyPlugin.notepad) {
+                    window.ImageCopyPlugin.notepad.content.innerHTML = '';
+                }
+                // 添加所有保存的链接
+                result.savedLinks.forEach(link => {
+                    addLinkToNotepad(link, false); // false表示不保存到存储
+                });
+            }
+        });
+    } catch (error) {
+        log('从存储加载链接失败: ' + error.message, 'error');
+    }
+}
+
 // 添加链接到记事本
-function addLinkToNotepad(link) {
+function addLinkToNotepad(link, saveToStorage = true) {
     try {
         if (!window.ImageCopyPlugin.notepad) {
             log('记事本不存在，尝试重新创建', 'warn');
@@ -294,6 +333,13 @@ function addLinkToNotepad(link) {
         content.insertBefore(linkElement, content.firstChild);
         
         log('链接已添加到记事本');
+
+        // 如果需要保存到存储
+        if (saveToStorage) {
+            // 获取所有当前链接
+            const allLinks = Array.from(content.querySelectorAll('a')).map(a => a.href);
+            saveLinksToStorage(allLinks);
+        }
     } catch (error) {
         log('添加链接到记事本失败: ' + error.message, 'error');
     }
