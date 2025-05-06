@@ -18,35 +18,56 @@ function log(message, type = 'info') {
 
 // 创建复制按钮
 function createCopyButton() {
-    try {
-        const button = document.createElement('button');
-        button.className = 'copy-link-button';
-        button.innerHTML = '复制链接';
-        button.title = '复制链接';
-        
-        // 使用更明显的样式
-        Object.assign(button.style, {
-            position: 'fixed',
-            padding: '8px 16px',
-            backgroundColor: '#4285f4',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-            zIndex: '999999',
-            display: 'block',
-            margin: '0',
-            fontFamily: 'Arial, sans-serif'
-        });
+    const button = document.createElement('button');
+    button.className = 'copy-link-button';
+    button.innerHTML = '复制链接';
+    
+    // 设置按钮样式
+    Object.assign(button.style, {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        zIndex: '999999',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        padding: '6px 12px',
+        fontSize: '12px',
+        cursor: 'pointer',
+        pointerEvents: 'auto',
+        transition: 'all 0.2s ease',
+        opacity: '0',
+        transform: 'translateY(-10px)'
+    });
 
-        return button;
-    } catch (error) {
-        log('创建复制按钮失败: ' + error.message, 'error');
-        return null;
-    }
+    // 添加悬停效果
+    button.addEventListener('mouseenter', () => {
+        button.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    });
+    button.addEventListener('mouseleave', () => {
+        button.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    });
+
+    return button;
+}
+
+// 创建按钮容器
+function createButtonContainer() {
+    const container = document.createElement('div');
+    Object.assign(container.style, {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: '999999',
+        pointerEvents: 'none'
+    });
+    return container;
 }
 
 // 创建记事本界面
@@ -332,91 +353,115 @@ function findParentAnchor(element) {
     }
 }
 
-// 处理鼠标进入事件
-function handleMouseEnter(e) {
+// 处理复制链接点击事件
+function handleCopyClick(img) {
     try {
-        const img = e.target;
-        log('鼠标进入图片');
-        
-        // 检查是否已经有按钮
-        if (document.querySelector('.copy-link-button')) {
-            log('按钮已存在');
-            return;
-        }
-        
-        const button = createCopyButton();
-        if (!button) {
-            log('创建按钮失败');
-            return;
-        }
+        // 阻止事件冒泡和默认行为
+        event.preventDefault();
+        event.stopPropagation();
 
-        // 获取图片的位置信息
-        const rect = img.getBoundingClientRect();
-        
-        // 设置按钮位置 - 放在图片右下角
-        button.style.top = (rect.bottom - 50) + 'px';
-        button.style.left = (rect.right - 50) + 'px';
-        
-        // 将按钮添加到body
-        document.body.appendChild(button);
-        
-        log('按钮已添加');
-        
-        // 添加点击事件
-        button.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const parentAnchor = findParentAnchor(img);
-            if (parentAnchor && parentAnchor.href) {
-                const link = parentAnchor.href;
-                copyToClipboard(link);
-                addLinkToNotepad(link);
+        // 查找父级a标签
+        const parentAnchor = findParentAnchor(img);
+        if (parentAnchor && parentAnchor.href) {
+            const link = parentAnchor.href;
+            copyToClipboard(link);
+            addLinkToNotepad(link);
+            log('已复制链接: ' + link);
+        } else {
+            // 如果没有父级a标签，尝试使用图片的src
+            if (img.src) {
+                copyToClipboard(img.src);
+                addLinkToNotepad(img.src);
+                log('已复制图片链接: ' + img.src);
             } else {
                 log('未找到可复制的链接', 'warn');
             }
-        });
-
-        // 为按钮添加鼠标进入和离开事件
-        button.addEventListener('mouseenter', (event) => {
-            event.stopPropagation();
-            // 防止触发图片的mouseleave事件
-            img.setAttribute('data-button-hover', 'true');
-        });
-
-        button.addEventListener('mouseleave', (event) => {
-            event.stopPropagation();
-            img.removeAttribute('data-button-hover');
-            // 检查鼠标是否真的离开了图片区域
-            const imgRect = img.getBoundingClientRect();
-            const mouseX = event.clientX;
-            const mouseY = event.clientY;
-            
-            if (mouseX < imgRect.left || mouseX > imgRect.right || 
-                mouseY < imgRect.top || mouseY > imgRect.bottom) {
-                button.remove();
-                log('按钮已移除');
-            }
-        });
+        }
     } catch (error) {
-        log('处理鼠标进入事件失败: ' + error.message, 'error');
+        log('处理复制点击事件时出错', error, 'error');
     }
 }
 
-// 处理鼠标离开事件
-function handleMouseLeave(e) {
+// 处理鼠标进入图片事件
+function handleMouseEnter(event) {
     try {
-        const img = e.target;
-        // 如果鼠标移到了按钮上，不移除按钮
-        if (img.getAttribute('data-button-hover') === 'true') {
+        const img = event.target;
+        log('鼠标进入图片', img.src);
+
+        // 检查是否已经有按钮
+        if (img._buttonContainer) {
             return;
         }
+
+        // 创建按钮容器
+        const container = createButtonContainer();
+        img._buttonContainer = container;
+        img.parentNode.insertBefore(container, img.nextSibling);
+
+        // 创建按钮
+        const button = createCopyButton();
+        container.appendChild(button);
+
+        // 显示按钮
+        requestAnimationFrame(() => {
+            button.style.opacity = '1';
+            button.style.transform = 'translateY(0)';
+        });
+
+        // 添加点击事件
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleCopyClick(img);
+        });
+
+        // 修改图片的mouseleave事件处理
+        const originalMouseLeave = img.onmouseleave;
+        img.onmouseleave = (e) => {
+            // 检查鼠标是否在按钮容器内
+            const rect = container.getBoundingClientRect();
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                return; // 如果鼠标在容器内，不触发mouseleave
+            }
+            
+            if (originalMouseLeave) {
+                originalMouseLeave.call(img, e);
+            }
+            handleMouseLeave(img);
+        };
+
+    } catch (error) {
+        log('处理鼠标进入事件时出错', error, 'error');
+    }
+}
+
+// 处理鼠标离开图片事件
+function handleMouseLeave(img) {
+    try {
+        log('鼠标离开图片', img.src);
         
-        const button = document.querySelector('.copy-link-button');
-        if (button) {
-            button.remove();
-            log('按钮已移除');
+        // 检查按钮容器是否存在
+        if (img._buttonContainer) {
+            const button = img._buttonContainer.querySelector('.copy-link-button');
+            if (button) {
+                // 添加淡出动画
+                button.style.opacity = '0';
+                button.style.transform = 'translateY(-10px)';
+                
+                // 等待动画完成后移除
+                setTimeout(() => {
+                    if (img._buttonContainer && img._buttonContainer.parentNode) {
+                        img._buttonContainer.parentNode.removeChild(img._buttonContainer);
+                        img._buttonContainer = null;
+                    }
+                }, 200);
+            }
         }
     } catch (error) {
-        log('处理鼠标离开事件失败: ' + error.message, 'error');
+        log('处理鼠标离开事件时出错', error, 'error');
     }
 }
 
