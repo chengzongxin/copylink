@@ -19,27 +19,29 @@ function log(message, type = 'info') {
 // 创建复制按钮
 function createCopyButton() {
     try {
-        const button = document.createElement('div');
+        const button = document.createElement('button');
         button.className = 'copy-link-button';
-        button.innerHTML = '📋';
+        button.innerHTML = '复制链接';
         button.title = '复制链接';
-        button.style.cssText = `
-            display: flex;
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            z-index: 999999;
-            background-color: rgba(255, 255, 255, 0.9);
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 14px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            transition: all 0.2s ease;
-        `;
+        
+        // 使用更明显的样式
+        Object.assign(button.style, {
+            position: 'fixed',
+            padding: '8px 16px',
+            backgroundColor: '#4285f4',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+            zIndex: '999999',
+            display: 'block',
+            margin: '0',
+            fontFamily: 'Arial, sans-serif'
+        });
+
         return button;
     } catch (error) {
         log('创建复制按钮失败: ' + error.message, 'error');
@@ -55,18 +57,23 @@ async function copyToClipboard(text) {
         const tooltip = document.createElement('div');
         tooltip.className = 'copy-tooltip';
         tooltip.textContent = '已复制！';
-        tooltip.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background-color: #333;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            z-index: 1000000;
-            pointer-events: none;
-        `;
+        
+        // 使用更明显的样式
+        Object.assign(tooltip.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            backgroundColor: '#4285f4',
+            color: 'white',
+            padding: '10px 20px',
+            borderRadius: '4px',
+            fontSize: '14px',
+            zIndex: '1000000',
+            pointerEvents: 'none',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+            fontWeight: 'bold'
+        });
+
         document.body.appendChild(tooltip);
         
         // 2秒后移除提示
@@ -103,7 +110,7 @@ function handleMouseEnter(e) {
         log('鼠标进入图片');
         
         // 检查是否已经有按钮
-        if (img.querySelector('.copy-link-button')) {
+        if (document.querySelector('.copy-link-button')) {
             log('按钮已存在');
             return;
         }
@@ -113,15 +120,17 @@ function handleMouseEnter(e) {
             log('创建按钮失败');
             return;
         }
+
+        // 获取图片的位置信息
+        const rect = img.getBoundingClientRect();
         
-        // 确保图片有相对定位
-        const imgStyle = window.getComputedStyle(img);
-        if (imgStyle.position === 'static') {
-            img.style.position = 'relative';
-        }
+        // 设置按钮位置 - 放在图片右下角
+        button.style.top = (rect.bottom - 50) + 'px';
+        button.style.left = (rect.right - 50) + 'px';
         
-        // 添加按钮
-        img.appendChild(button);
+        // 将按钮添加到body
+        document.body.appendChild(button);
+        
         log('按钮已添加');
         
         // 添加点击事件
@@ -142,8 +151,7 @@ function handleMouseEnter(e) {
 // 处理鼠标离开事件
 function handleMouseLeave(e) {
     try {
-        const img = e.target;
-        const button = img.querySelector('.copy-link-button');
+        const button = document.querySelector('.copy-link-button');
         if (button) {
             button.remove();
             log('按钮已移除');
