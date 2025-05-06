@@ -443,6 +443,12 @@ function handleMouseLeave(img) {
     try {
         log('鼠标离开图片', img.src);
         
+        // 如果启用了自动显示，不移除按钮
+        if (window.ImageCopyPlugin.autoShowButton) {
+            log('自动显示已启用，保持按钮显示');
+            return;
+        }
+        
         // 检查按钮容器是否存在
         if (img._buttonContainer) {
             const button = img._buttonContainer.querySelector('.copy-link-button');
@@ -508,6 +514,21 @@ function initialize() {
             log('记事本创建成功');
         }
 
+        // 从存储中获取自动显示设置
+        chrome.storage.sync.get(['autoShowButton'], function(result) {
+            window.ImageCopyPlugin.autoShowButton = result.autoShowButton || false;
+            
+            // 如果启用了自动显示，为所有图片添加按钮
+            if (window.ImageCopyPlugin.autoShowButton) {
+                const images = document.querySelectorAll('img');
+                images.forEach(img => {
+                    if (!img._buttonContainer) {
+                        handleMouseEnter({ target: img });
+                    }
+                });
+            }
+        });
+
         // 为现有图片添加事件监听器
         addImageListeners();
 
@@ -518,6 +539,20 @@ function initialize() {
                     mutations.forEach((mutation) => {
                         if (mutation.addedNodes.length) {
                             addImageListeners();
+                            
+                            // 如果启用了自动显示，为新添加的图片添加按钮
+                            if (window.ImageCopyPlugin.autoShowButton) {
+                                mutation.addedNodes.forEach(node => {
+                                    if (node.nodeType === 1) { // 元素节点
+                                        const images = node.querySelectorAll('img');
+                                        images.forEach(img => {
+                                            if (!img._buttonContainer) {
+                                                handleMouseEnter({ target: img });
+                                            }
+                                        });
+                                    }
+                                });
+                            }
                         }
                     });
                 } catch (error) {
@@ -564,5 +599,56 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 showNotepad();
             }
         }
+    } else if (request.action === 'toggleAutoShow') {
+        window.ImageCopyPlugin.autoShowButton = request.value;
+        
+        // 如果启用了自动显示，为所有图片添加按钮
+        if (request.value) {
+            const images = document.querySelectorAll('img');
+            images.forEach(img => {
+                if (!img._buttonContainer) {
+                    handleMouseEnter({ target: img });
+                }
+            });
+        } else {
+            // 如果禁用了自动显示，移除所有按钮
+            const containers = document.querySelectorAll('._buttonContainer');
+            containers.forEach(container => {
+                if (container.parentNode) {
+                    container.parentNode.removeChild(container);
+                }
+            });
+        }
     }
-}); 
+});
+
+// 处理自动显示按钮
+function handleAutoShow(value) {
+    try {
+        window.ImageCopyPlugin.autoShowButton = value;
+        log('自动显示状态已更新: ' + value);
+        
+        if (value) {
+            // 为所有图片添加按钮
+            const images = document.querySelectorAll('img');
+            log('找到 ' + images.length + ' 个图片');
+            images.forEach(img => {
+                if (!img._buttonContainer) {
+                    log('为图片添加按钮: ' + img.src);
+                    handleMouseEnter({ target: img });
+                }
+            });
+        } else {
+            // 移除所有按钮
+            const containers = document.querySelectorAll('._buttonContainer');
+            log('移除 ' + containers.length + ' 个按钮容器');
+            containers.forEach(container => {
+                if (container.parentNode) {
+                    container.parentNode.removeChild(container);
+                }
+            });
+        }
+    } catch (error) {
+        log('处理自动显示时出错: ' + error.message, 'error');
+    }
+} 

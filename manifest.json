@@ -2,13 +2,18 @@
   "manifest_version": 3,
   "name": "图片链接复制工具",
   "version": "1.0",
-  "description": "鼠标悬停在图片上时显示复制链接按钮，并记录复制的链接",
+  "description": "快速复制图片链接并记录到记事本",
   "permissions": [
     "activeTab",
-    "clipboardWrite"
+    "clipboardWrite",
+    "storage"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
   },
   "content_scripts": [
     {
