@@ -1,5 +1,11 @@
 // 创建插件的命名空间
-window.ImageCopyPlugin = window.ImageCopyPlugin || {};
+window.ImageCopyPlugin = window.ImageCopyPlugin || {
+    enabled: true, // 添加全局开关状态
+    initialized: false,
+    autoShowButton: false,
+    notepad: null,
+    observer: null
+};
 
 // 调试日志函数
 function log(message, type = 'info') {
@@ -14,6 +20,55 @@ function log(message, type = 'info') {
         default:
             console.log(prefix, message);
     }
+}
+
+// 创建全局提示框
+function createToast() {
+    const toast = document.createElement('div');
+    toast.id = '_globalToast';
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 4px;
+        font-size: 14px;
+        color: white;
+        z-index: 1000000;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    `;
+    document.body.appendChild(toast);
+    return toast;
+}
+
+// 显示提示信息
+function showToast(message, type = 'success') {
+    let toast = document.getElementById('_globalToast');
+    if (!toast) {
+        toast = createToast();
+    }
+
+    // 设置样式
+    toast.style.backgroundColor = type === 'success' ? '#4285f4' : '#f44336';
+    
+    // 设置内容
+    toast.textContent = message;
+    
+    // 显示提示
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    });
+
+    // 2秒后隐藏
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+    }, 2000);
 }
 
 // 创建复制按钮
@@ -75,142 +130,313 @@ function createButtonContainer() {
     return container;
 }
 
-// 创建记事本界面
+// 创建记事本
 function createNotepad() {
     try {
         const notepad = document.createElement('div');
-        notepad.className = 'image-copy-notepad';
-        
-        // 设置记事本样式
-        Object.assign(notepad.style, {
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            width: '250px',
-            height: '300px',
-            backgroundColor: '#ffffff',
-            boxShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-            borderRadius: '6px',
-            zIndex: '999999',
-            display: 'none',
-            flexDirection: 'column',
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '12px'
-        });
-
-        // 创建标题栏
-        const header = document.createElement('div');
-        Object.assign(header.style, {
-            padding: '6px 10px',
-            backgroundColor: '#4285f4',
-            color: 'white',
-            borderTopLeftRadius: '6px',
-            borderTopRightRadius: '6px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            cursor: 'move',
-            fontSize: '12px'
-        });
-        header.innerHTML = `
-            <span style="font-weight: bold;">链接记事本</span>
-            <div>
-                <button id="copy-all" style="background: none; border: none; color: white; cursor: pointer; margin-right: 8px; font-size: 12px;">复制全部</button>
-                <button id="minimize-notepad" style="background: none; border: none; color: white; cursor: pointer; margin-right: 8px; font-size: 12px;">_</button>
-                <button id="clear-notepad" style="background: none; border: none; color: white; cursor: pointer; font-size: 12px;">清空</button>
-            </div>
+        notepad.className = '_notepad';
+        notepad.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            height: 400px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+            flex-direction: column;
+            z-index: 999999;
+            resize: both;
+            overflow: auto;
+            font-size: 12px;
         `;
-        notepad.appendChild(header);
 
-        // 创建内容区域
-        const content = document.createElement('div');
-        Object.assign(content.style, {
-            flex: '1',
-            padding: '8px',
-            overflowY: 'auto',
-            backgroundColor: '#f5f5f5',
-            fontSize: '12px'
-        });
-        notepad.appendChild(content);
+        const titleBar = document.createElement('div');
+        titleBar.className = '_notepadTitle';
+        titleBar.style.cssText = `
+            padding: 8px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        `;
 
-        // 添加到body
-        document.body.appendChild(notepad);
+        const titleText = document.createElement('span');
+        titleText.textContent = '链接记事本';
+        titleText.style.cssText = `
+            font-weight: bold;
+            color: #333;
+        `;
 
-        // 添加清空按钮事件
-        document.getElementById('clear-notepad').addEventListener('click', () => {
-            content.innerHTML = '';
-            // 清空存储中的链接
-            chrome.storage.sync.remove(['savedLinks'], function() {
-                log('存储中的链接已清空');
-            });
-            log('记事本已清空');
-        });
+        const controls = document.createElement('div');
+        controls.style.cssText = `
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        `;
 
-        // 添加最小化按钮事件
-        document.getElementById('minimize-notepad').addEventListener('click', () => {
-            notepad.style.display = 'none';
-            log('记事本已最小化');
-        });
-
-        // 添加复制全部按钮事件
-        document.getElementById('copy-all').addEventListener('click', () => {
-            const links = Array.from(content.querySelectorAll('a')).map(a => a.href);
+        // 添加复制全部按钮
+        const copyAllBtn = document.createElement('button');
+        copyAllBtn.textContent = '复制全部';
+        copyAllBtn.title = '复制所有链接';
+        copyAllBtn.style.cssText = `
+            padding: 2px 6px;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #4285f4;
+        `;
+        copyAllBtn.onclick = async () => {
+            const links = Array.from(notepad.querySelectorAll('._notepadContent a')).map(a => a.href);
             if (links.length > 0) {
                 const allLinks = links.join('\n');
-                copyToClipboard(allLinks);
-                log('已复制所有链接');
+                try {
+                    await navigator.clipboard.writeText(allLinks);
+                    // 在记事本中间显示提示
+                    const message = document.createElement('div');
+                    message.textContent = '已复制 ' + links.length + ' 个链接！';
+                    message.style.cssText = `
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(66, 133, 244, 0.9);
+                        color: white;
+                        padding: 12px 24px;
+                        border-radius: 4px;
+                        font-size: 14px;
+                        text-align: center;
+                        z-index: 1000;
+                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+                        pointer-events: none;
+                    `;
+                    notepad.appendChild(message);
+                    setTimeout(() => message.remove(), 2000);
+                } catch (error) {
+                    const message = document.createElement('div');
+                    message.textContent = '复制失败：' + error.message;
+                    message.style.cssText = `
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(244, 67, 54, 0.9);
+                        color: white;
+                        padding: 12px 24px;
+                        border-radius: 4px;
+                        font-size: 14px;
+                        text-align: center;
+                        z-index: 1000;
+                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+                        pointer-events: none;
+                    `;
+                    notepad.appendChild(message);
+                    setTimeout(() => message.remove(), 2000);
+                }
             } else {
-                log('记事本为空', 'warn');
+                const message = document.createElement('div');
+                message.textContent = '记事本为空！';
+                message.style.cssText = `
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(244, 67, 54, 0.9);
+                    color: white;
+                    padding: 12px 24px;
+                    border-radius: 4px;
+                    font-size: 14px;
+                    text-align: center;
+                    z-index: 1000;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+                    pointer-events: none;
+                `;
+                notepad.appendChild(message);
+                setTimeout(() => message.remove(), 2000);
             }
-        });
+        };
 
-        // 添加拖拽功能
+        // 添加清空按钮
+        const clearBtn = document.createElement('button');
+        clearBtn.textContent = '清空';
+        clearBtn.title = '清空所有链接';
+        clearBtn.style.cssText = `
+            padding: 2px 6px;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #f44336;
+        `;
+        clearBtn.onclick = () => {
+            // 创建确认对话框
+            const confirmDialog = document.createElement('div');
+            confirmDialog.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                z-index: 1000001;
+                text-align: center;
+                min-width: 200px;
+            `;
+            
+            const message = document.createElement('p');
+            message.textContent = '确定要清空所有链接吗？';
+            message.style.marginBottom = '15px';
+            
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.cssText = `
+                display: flex;
+                gap: 10px;
+                justify-content: center;
+            `;
+            
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = '确定';
+            confirmBtn.style.cssText = `
+                padding: 5px 15px;
+                background: #f44336;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+            
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = '取消';
+            cancelBtn.style.cssText = `
+                padding: 5px 15px;
+                background: #ccc;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
+            
+            confirmBtn.onclick = () => {
+                const content = notepad.querySelector('._notepadContent');
+                content.innerHTML = '';
+                confirmDialog.remove();
+                showToast('已清空所有链接！', 'success');
+            };
+            
+            cancelBtn.onclick = () => {
+                confirmDialog.remove();
+            };
+            
+            buttonContainer.appendChild(confirmBtn);
+            buttonContainer.appendChild(cancelBtn);
+            confirmDialog.appendChild(message);
+            confirmDialog.appendChild(buttonContainer);
+            document.body.appendChild(confirmDialog);
+        };
+
+        // 添加最小化按钮
+        const minimizeBtn = document.createElement('button');
+        minimizeBtn.textContent = '_';
+        minimizeBtn.title = '最小化';
+        minimizeBtn.style.cssText = `
+            padding: 2px 6px;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+        `;
+        minimizeBtn.onclick = () => {
+            notepad.style.display = 'none';
+        };
+
+        const zoomInBtn = document.createElement('button');
+        zoomInBtn.textContent = '+';
+        zoomInBtn.title = '放大';
+        zoomInBtn.style.cssText = `
+            padding: 2px 6px;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+        `;
+        zoomInBtn.onclick = () => {
+            const currentWidth = parseInt(notepad.style.width);
+            const currentHeight = parseInt(notepad.style.height);
+            notepad.style.width = (currentWidth + 50) + 'px';
+            notepad.style.height = (currentHeight + 50) + 'px';
+        };
+
+        const zoomOutBtn = document.createElement('button');
+        zoomOutBtn.textContent = '-';
+        zoomOutBtn.title = '缩小';
+        zoomOutBtn.style.cssText = zoomInBtn.style.cssText;
+        zoomOutBtn.onclick = () => {
+            const currentWidth = parseInt(notepad.style.width);
+            const currentHeight = parseInt(notepad.style.height);
+            if (currentWidth > 200 && currentHeight > 200) {
+                notepad.style.width = (currentWidth - 50) + 'px';
+                notepad.style.height = (currentHeight - 50) + 'px';
+            }
+        };
+
+        controls.appendChild(copyAllBtn);
+        controls.appendChild(clearBtn);
+        controls.appendChild(zoomInBtn);
+        controls.appendChild(zoomOutBtn);
+        controls.appendChild(minimizeBtn);
+        titleBar.appendChild(titleText);
+        titleBar.appendChild(controls);
+
+        const content = document.createElement('div');
+        content.className = '_notepadContent';
+        content.style.cssText = `
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 12px;
+        `;
+
+        notepad.appendChild(titleBar);
+        notepad.appendChild(content);
+        document.body.appendChild(notepad);
+
         let isDragging = false;
         let currentX;
         let currentY;
         let initialX;
         let initialY;
-        let xOffset = 0;
-        let yOffset = 0;
 
-        header.addEventListener('mousedown', dragStart);
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('mouseup', dragEnd);
+        titleBar.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            initialX = e.clientX - notepad.offsetLeft;
+            initialY = e.clientY - notepad.offsetTop;
+        });
 
-        function dragStart(e) {
-            initialX = e.clientX - xOffset;
-            initialY = e.clientY - yOffset;
-
-            if (e.target === header) {
-                isDragging = true;
-            }
-        }
-
-        function drag(e) {
+        document.addEventListener('mousemove', (e) => {
             if (isDragging) {
                 e.preventDefault();
                 currentX = e.clientX - initialX;
                 currentY = e.clientY - initialY;
-
-                xOffset = currentX;
-                yOffset = currentY;
-
-                setTranslate(currentX, currentY, notepad);
+                notepad.style.left = currentX + 'px';
+                notepad.style.top = currentY + 'px';
+                notepad.style.right = 'auto';
+                notepad.style.bottom = 'auto';
             }
-        }
+        });
 
-        function dragEnd(e) {
-            initialX = currentX;
-            initialY = currentY;
+        document.addEventListener('mouseup', () => {
             isDragging = false;
-        }
-
-        function setTranslate(xPos, yPos, el) {
-            el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
-        }
-
-        // 加载保存的链接
-        loadLinksFromStorage();
+        });
 
         return { notepad, content };
     } catch (error) {
@@ -244,11 +470,15 @@ function hideNotepad() {
 }
 
 // 保存链接到存储
-function saveLinksToStorage(links) {
+function saveLinksToStorage() {
     try {
-        chrome.storage.sync.set({ 'savedLinks': links }, function() {
-            log('链接已保存到存储');
-        });
+        if (window.ImageCopyPlugin.notepad) {
+            const content = window.ImageCopyPlugin.notepad.content;
+            const links = Array.from(content.querySelectorAll('a')).map(a => a.href);
+            chrome.storage.sync.set({ 'savedLinks': links }, function() {
+                log('链接已保存到存储');
+            });
+        }
     } catch (error) {
         log('保存链接到存储失败: ' + error.message, 'error');
     }
@@ -266,7 +496,7 @@ function loadLinksFromStorage() {
                 }
                 // 添加所有保存的链接
                 result.savedLinks.forEach(link => {
-                    addLinkToNotepad(link, false); // false表示不保存到存储
+                    addToNotepad(link);
                 });
             }
         });
@@ -276,75 +506,85 @@ function loadLinksFromStorage() {
 }
 
 // 添加链接到记事本
-function addLinkToNotepad(link, saveToStorage = true) {
+function addToNotepad(link) {
     try {
         if (!window.ImageCopyPlugin.notepad) {
-            log('记事本不存在，尝试重新创建', 'warn');
-            const notepad = createNotepad();
-            if (notepad) {
-                window.ImageCopyPlugin.notepad = notepad;
-            } else {
-                log('创建记事本失败', 'error');
-                return;
-            }
+            window.ImageCopyPlugin.notepad = createNotepad();
         }
 
         const content = window.ImageCopyPlugin.notepad.content;
-        const linkElement = document.createElement('div');
-        Object.assign(linkElement.style, {
-            padding: '6px',
-            marginBottom: '6px',
-            backgroundColor: 'white',
-            borderRadius: '4px',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: '12px'
-        });
+        const linkCount = content.children.length + 1;
 
+        // 创建链接容器
+        const linkContainer = document.createElement('div');
+        linkContainer.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+            padding: 2px;
+            border-bottom: 1px solid #eee;
+        `;
+
+        // 创建序号
+        const number = document.createElement('span');
+        number.textContent = `${linkCount}.`;
+        number.style.cssText = `
+            color: #666;
+            min-width: 24px;
+        `;
+
+        // 创建链接文本
         const linkText = document.createElement('a');
         linkText.href = link;
         linkText.textContent = link;
         linkText.target = '_blank';
-        Object.assign(linkText.style, {
-            color: '#4285f4',
-            textDecoration: 'none',
-            flex: '1',
-            marginRight: '8px',
-            wordBreak: 'break-all',
-            fontSize: '12px'
-        });
+        linkText.style.cssText = `
+            color: #0066cc;
+            text-decoration: none;
+            flex: 1;
+            word-break: break-all;
+            font-size: 12px;
+            line-height: 1.2;
+        `;
 
-        const copyButton = document.createElement('button');
-        copyButton.textContent = '复制';
-        Object.assign(copyButton.style, {
-            padding: '2px 6px',
-            backgroundColor: '#4285f4',
-            color: 'white',
-            border: 'none',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            fontSize: '11px',
-            whiteSpace: 'nowrap'
-        });
+        // 创建删除按钮
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '删除';
+        deleteBtn.title = '删除此链接';
+        deleteBtn.style.cssText = `
+            padding: 2px 6px;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        `;
+        deleteBtn.onclick = () => {
+            linkContainer.remove();
+            // 更新剩余链接的序号
+            const links = content.children;
+            for (let i = 0; i < links.length; i++) {
+                const numSpan = links[i].querySelector('span');
+                if (numSpan) {
+                    numSpan.textContent = `${i + 1}.`;
+                }
+            }
+            // 保存更新后的链接列表
+            saveLinksToStorage();
+        };
 
-        copyButton.addEventListener('click', () => {
-            copyToClipboard(link);
-        });
+        // 组装链接容器
+        linkContainer.appendChild(number);
+        linkContainer.appendChild(linkText);
+        linkContainer.appendChild(deleteBtn);
+        content.appendChild(linkContainer);
 
-        linkElement.appendChild(linkText);
-        linkElement.appendChild(copyButton);
-        content.insertBefore(linkElement, content.firstChild);
-        
-        log('链接已添加到记事本');
+        // 保存链接到存储
+        saveLinksToStorage();
 
-        // 如果需要保存到存储
-        if (saveToStorage) {
-            // 获取所有当前链接
-            const allLinks = Array.from(content.querySelectorAll('a')).map(a => a.href);
-            saveLinksToStorage(allLinks);
-        }
+        // 不再自动显示记事本
+        // showNotepad();
     } catch (error) {
         log('添加链接到记事本失败: ' + error.message, 'error');
     }
@@ -424,13 +664,13 @@ function handleCopyClick(img) {
         if (parentAnchor && parentAnchor.href) {
             const link = parentAnchor.href;
             copyToClipboard(link);
-            addLinkToNotepad(link);
+            addToNotepad(link);
             log('已复制链接: ' + link);
         } else {
             // 如果没有父级a标签，尝试使用图片的src
             if (img.src) {
                 copyToClipboard(img.src);
-                addLinkToNotepad(img.src);
+                addToNotepad(img.src);
                 log('已复制图片链接: ' + img.src);
             } else {
                 log('未找到可复制的链接', 'warn');
@@ -558,7 +798,7 @@ function addImageListeners() {
     }
 }
 
-// 初始化函数
+// 修改初始化函数
 function initialize() {
     try {
         // 确保document.body存在
@@ -572,32 +812,177 @@ function initialize() {
             return;
         }
 
-        // 创建记事本
-        const notepad = createNotepad();
-        if (notepad) {
-            window.ImageCopyPlugin.notepad = notepad;
-            log('记事本创建成功');
-        }
-
-        // 从存储中获取自动显示设置
-        chrome.storage.sync.get(['autoShowButton'], function(result) {
+        // 从存储中获取插件状态
+        chrome.storage.sync.get(['pluginEnabled', 'autoShowButton', 'savedLinks'], function(result) {
+            window.ImageCopyPlugin.enabled = result.pluginEnabled !== false; // 默认为启用
             window.ImageCopyPlugin.autoShowButton = result.autoShowButton || false;
             
-            // 如果启用了自动显示，为所有图片添加按钮
-            if (window.ImageCopyPlugin.autoShowButton) {
-                const images = document.querySelectorAll('img');
-                images.forEach(img => {
-                    if (!img._buttonContainer) {
-                        handleMouseEnter({ target: img });
+            if (window.ImageCopyPlugin.enabled) {
+                // 创建记事本
+                const notepad = createNotepad();
+                if (notepad) {
+                    window.ImageCopyPlugin.notepad = notepad;
+                    log('记事本创建成功');
+                    
+                    // 加载保存的链接
+                    if (result.savedLinks && result.savedLinks.length > 0) {
+                        result.savedLinks.forEach(link => {
+                            addToNotepad(link);
+                        });
+                        log('已加载 ' + result.savedLinks.length + ' 个保存的链接');
                     }
-                });
+                    
+                    // 默认隐藏记事本
+                    hideNotepad();
+                }
+
+                // 如果启用了自动显示，为所有图片添加按钮
+                if (window.ImageCopyPlugin.autoShowButton) {
+                    const images = document.querySelectorAll('img');
+                    images.forEach(img => {
+                        if (!img._buttonContainer) {
+                            handleMouseEnter({ target: img });
+                        }
+                    });
+                }
+
+                // 为现有图片添加事件监听器
+                addImageListeners();
+
+                // 创建并配置MutationObserver
+                setupMutationObserver();
             }
         });
+        
+        window.ImageCopyPlugin.initialized = true;
+        log('插件初始化成功');
+    } catch (error) {
+        log('初始化失败: ' + error.message, 'error');
+    }
+}
 
-        // 为现有图片添加事件监听器
-        addImageListeners();
+// 等待DOM加载完成
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+} else {
+    initialize();
+}
 
-        // 创建并配置MutationObserver
+// 添加页面完全加载后的处理
+window.addEventListener('load', () => {
+    if (!window.ImageCopyPlugin.initialized) {
+        initialize();
+    }
+});
+
+// 添加消息监听器
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+    try {
+        switch (request.action) {
+            case 'togglePlugin':
+                window.ImageCopyPlugin.enabled = request.value;
+                if (request.value) {
+                    initialize();
+                    sendResponse({ success: true, message: '插件已启用' });
+                } else {
+                    // 禁用插件时清理所有按钮和记事本
+                    const containers = document.querySelectorAll('._buttonContainer');
+                    containers.forEach(container => {
+                        if (container.parentNode) {
+                            container.parentNode.removeChild(container);
+                        }
+                    });
+                    if (window.ImageCopyPlugin.notepad) {
+                        window.ImageCopyPlugin.notepad.notepad.remove();
+                        window.ImageCopyPlugin.notepad = null;
+                    }
+                    sendResponse({ success: true, message: '插件已禁用' });
+                }
+                break;
+
+            case 'toggleNotepad':
+                if (window.ImageCopyPlugin.enabled && window.ImageCopyPlugin.notepad) {
+                    const isVisible = window.ImageCopyPlugin.notepad.notepad.style.display === 'flex';
+                    if (isVisible) {
+                        hideNotepad();
+                        sendResponse({ success: true, message: '记事本已隐藏' });
+                    } else {
+                        showNotepad();
+                        sendResponse({ success: true, message: '记事本已显示' });
+                    }
+                } else {
+                    sendResponse({ success: false, message: '插件未启用或记事本未初始化' });
+                }
+                break;
+
+            case 'showNotepad':
+                if (window.ImageCopyPlugin.enabled) {
+                    if (!window.ImageCopyPlugin.notepad) {
+                        window.ImageCopyPlugin.notepad = createNotepad();
+                    }
+                    showNotepad();
+                    sendResponse({ success: true, message: '记事本已显示' });
+                } else {
+                    sendResponse({ success: false, message: '插件未启用' });
+                }
+                break;
+
+            case 'toggleAutoShow':
+                if (window.ImageCopyPlugin.enabled) {
+                    handleAutoShow(request.value);
+                    sendResponse({ 
+                        success: true, 
+                        message: request.value ? '已启用自动显示' : '已禁用自动显示' 
+                    });
+                } else {
+                    sendResponse({ success: false, message: '插件未启用' });
+                }
+                break;
+
+            default:
+                sendResponse({ success: false, message: '未知的操作类型' });
+        }
+    } catch (error) {
+        log('处理消息时出错: ' + error.message, 'error');
+        sendResponse({ success: false, message: '操作失败: ' + error.message });
+    }
+    return true; // 保持消息通道开放，以便异步响应
+});
+
+// 处理自动显示按钮
+function handleAutoShow(value) {
+    try {
+        window.ImageCopyPlugin.autoShowButton = value;
+        log('自动显示状态已更新: ' + value);
+        
+        if (value) {
+            // 为所有图片添加按钮
+            const images = document.querySelectorAll('img');
+            log('找到 ' + images.length + ' 个图片');
+            images.forEach(img => {
+                if (!img._buttonContainer) {
+                    log('为图片添加按钮: ' + img.src);
+                    handleMouseEnter({ target: img });
+                }
+            });
+        } else {
+            // 移除所有按钮
+            const containers = document.querySelectorAll('._buttonContainer');
+            log('移除 ' + containers.length + ' 个按钮容器');
+            containers.forEach(container => {
+                if (container.parentNode) {
+                    container.parentNode.removeChild(container);
+                }
+            });
+        }
+    } catch (error) {
+        log('处理自动显示时出错: ' + error.message, 'error');
+    }
+}
+
+// 创建并配置MutationObserver
+function setupMutationObserver() {
+    try {
         if (!window.ImageCopyPlugin.observer) {
             window.ImageCopyPlugin.observer = new MutationObserver((mutations) => {
                 try {
@@ -631,89 +1016,7 @@ function initialize() {
                 subtree: true
             });
         }
-        
-        window.ImageCopyPlugin.initialized = true;
-        log('插件初始化成功');
     } catch (error) {
-        log('初始化失败: ' + error.message, 'error');
-    }
-}
-
-// 等待DOM加载完成
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize);
-} else {
-    initialize();
-}
-
-// 添加页面完全加载后的处理
-window.addEventListener('load', () => {
-    if (!window.ImageCopyPlugin.initialized) {
-        initialize();
-    }
-});
-
-// 添加消息监听器
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'toggleNotepad') {
-        if (window.ImageCopyPlugin.notepad) {
-            const isVisible = window.ImageCopyPlugin.notepad.notepad.style.display === 'flex';
-            if (isVisible) {
-                hideNotepad();
-            } else {
-                showNotepad();
-            }
-        }
-    } else if (request.action === 'toggleAutoShow') {
-        window.ImageCopyPlugin.autoShowButton = request.value;
-        
-        // 如果启用了自动显示，为所有图片添加按钮
-        if (request.value) {
-            const images = document.querySelectorAll('img');
-            images.forEach(img => {
-                if (!img._buttonContainer) {
-                    handleMouseEnter({ target: img });
-                }
-            });
-        } else {
-            // 如果禁用了自动显示，移除所有按钮
-            const containers = document.querySelectorAll('._buttonContainer');
-            containers.forEach(container => {
-                if (container.parentNode) {
-                    container.parentNode.removeChild(container);
-                }
-            });
-        }
-    }
-});
-
-// 处理自动显示按钮
-function handleAutoShow(value) {
-    try {
-        window.ImageCopyPlugin.autoShowButton = value;
-        log('自动显示状态已更新: ' + value);
-        
-        if (value) {
-            // 为所有图片添加按钮
-            const images = document.querySelectorAll('img');
-            log('找到 ' + images.length + ' 个图片');
-            images.forEach(img => {
-                if (!img._buttonContainer) {
-                    log('为图片添加按钮: ' + img.src);
-                    handleMouseEnter({ target: img });
-                }
-            });
-        } else {
-            // 移除所有按钮
-            const containers = document.querySelectorAll('._buttonContainer');
-            log('移除 ' + containers.length + ' 个按钮容器');
-            containers.forEach(container => {
-                if (container.parentNode) {
-                    container.parentNode.removeChild(container);
-                }
-            });
-        }
-    } catch (error) {
-        log('处理自动显示时出错: ' + error.message, 'error');
+        log('设置MutationObserver失败: ' + error.message, 'error');
     }
 } 

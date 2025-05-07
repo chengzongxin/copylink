@@ -2,11 +2,11 @@
   "manifest_version": 3,
   "name": "图片链接复制工具",
   "version": "1.0",
-  "description": "快速复制图片链接并记录到记事本",
+  "description": "复制图片链接的Chrome扩展",
   "permissions": [
-    "activeTab",
+    "storage",
     "clipboardWrite",
-    "storage"
+    "notifications"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -15,15 +15,17 @@
       "128": "icon128.png"
     }
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_end"
-    }
-  ],
   "icons": {
     "48": "icon48.png",
     "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
   }
 } 
