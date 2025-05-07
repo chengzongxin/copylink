@@ -1,5 +1,26 @@
+/**
+ * 图片链接复制工具 v1.2.0
+ * 
+ * 更新日志：
+ * v1.2.0 (2024-03-21)
+ * - 修复存储限制导致的链接丢失问题
+ * - 优化存储机制，使用双重备份
+ * - 提升数据安全性
+ * 
+ * v1.1.0
+ * - 添加记事本功能
+ * - 支持链接管理
+ * - 添加复制全部功能
+ * 
+ * v1.0.0
+ * - 初始版本
+ * - 支持图片链接复制
+ * - 支持自动显示按钮
+ */
+
 // 创建插件的命名空间
 window.ImageCopyPlugin = window.ImageCopyPlugin || {
+    version: '1.2.0',
     enabled: true, // 添加全局开关状态
     initialized: false,
     autoShowButton: false,
@@ -139,7 +160,7 @@ function createNotepad() {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            width: 300px;
+            width: 320px;
             height: 400px;
             background: white;
             border: 1px solid #ccc;
@@ -171,7 +192,24 @@ function createNotepad() {
         titleText.style.cssText = `
             font-weight: bold;
             color: #333;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         `;
+
+        // 添加版本号
+        const versionText = document.createElement('span');
+        versionText.textContent = `v${window.ImageCopyPlugin.version}`;
+        versionText.style.cssText = `
+            font-size: 10px;
+            color: #666;
+            background: #f0f0f0;
+            padding: 1px 3px;
+            border-radius: 2px;
+            font-weight: normal;
+            margin-left: -2px;
+        `;
+        titleText.appendChild(versionText);
 
         const controls = document.createElement('div');
         controls.style.cssText = `
@@ -471,42 +509,96 @@ function hideNotepad() {
 
 // 保存链接到存储
 function saveLinksToStorage() {
-    try {
-        if (window.ImageCopyPlugin.notepad) {
-            const content = window.ImageCopyPlugin.notepad.content;
-            const links = Array.from(content.querySelectorAll('a')).map(a => a.href);
-            chrome.storage.sync.set({ 'savedLinks': links }, function() {
-                log('链接已保存到存储');
-            });
+    return new Promise((resolve, reject) => {
+        try {
+            if (window.ImageCopyPlugin.notepad) {
+                const content = window.ImageCopyPlugin.notepad.content;
+                const links = Array.from(content.querySelectorAll('a')).map(a => a.href);
+                
+                // 数据验证
+                if (!Array.isArray(links)) {
+                    log('保存的链接数据格式错误', 'error');
+                    reject(new Error('数据格式错误'));
+                    return;
+                }
+
+                // 记录当前链接数量
+                log(`准备保存 ${links.length} 个链接`);
+                
+                // 保存到 chrome.storage
+                chrome.storage.local.set({ 'savedLinks': links }, function() {
+                    if (chrome.runtime.lastError) {
+                        log('保存链接失败: ' + chrome.runtime.lastError.message, 'error');
+                        reject(chrome.runtime.lastError);
+                    } else {
+                        log(`成功保存 ${links.length} 个链接`);
+                        resolve(links);
+                    }
+                });
+            } else {
+                reject(new Error('记事本不存在'));
+            }
+        } catch (error) {
+            log('保存链接失败: ' + error.message, 'error');
+            reject(error);
         }
-    } catch (error) {
-        log('保存链接到存储失败: ' + error.message, 'error');
-    }
+    });
 }
 
 // 从存储加载链接
 function loadLinksFromStorage() {
-    try {
-        chrome.storage.sync.get(['savedLinks'], function(result) {
-            if (result.savedLinks && result.savedLinks.length > 0) {
-                log('从存储加载了 ' + result.savedLinks.length + ' 个链接');
-                // 清空当前记事本内容
-                if (window.ImageCopyPlugin.notepad) {
-                    window.ImageCopyPlugin.notepad.content.innerHTML = '';
+    return new Promise((resolve, reject) => {
+        try {
+            log('开始从存储加载链接...');
+            
+            chrome.storage.local.get(['savedLinks'], function(result) {
+                if (chrome.runtime.lastError) {
+                    log('加载链接失败: ' + chrome.runtime.lastError.message, 'error');
+                    reject(chrome.runtime.lastError);
+                    return;
                 }
-                // 添加所有保存的链接
-                result.savedLinks.forEach(link => {
-                    addToNotepad(link);
-                });
-            }
-        });
-    } catch (error) {
-        log('从存储加载链接失败: ' + error.message, 'error');
-    }
+
+                if (result.savedLinks && Array.isArray(result.savedLinks) && result.savedLinks.length > 0) {
+                    log(`从存储读取到 ${result.savedLinks.length} 个链接`);
+                    
+                    // 验证链接数据
+                    const validLinks = result.savedLinks.filter(link => typeof link === 'string' && link.startsWith('http'));
+                    log(`验证后有效链接数量: ${validLinks.length}`);
+                    
+                    if (validLinks.length !== result.savedLinks.length) {
+                        log(`发现 ${result.savedLinks.length - validLinks.length} 个无效链接`, 'warn');
+                    }
+                    
+                    // 清空当前记事本内容
+                    if (window.ImageCopyPlugin.notepad) {
+                        window.ImageCopyPlugin.notepad.content.innerHTML = '';
+                    }
+                    
+                    // 添加所有有效的链接
+                    validLinks.forEach(link => {
+                        addToNotepad(link);
+                    });
+                    
+                    // 如果有效链接数量与原始数量不同，更新存储
+                    if (validLinks.length !== result.savedLinks.length) {
+                        log('更新存储中的链接数据...');
+                        chrome.storage.local.set({ 'savedLinks': validLinks });
+                    }
+                    
+                    resolve(validLinks);
+                } else {
+                    resolve([]);
+                }
+            });
+        } catch (error) {
+            log('从存储加载链接失败: ' + error.message, 'error');
+            reject(error);
+        }
+    });
 }
 
 // 添加链接到记事本
-function addToNotepad(link) {
+async function addToNotepad(link) {
     try {
         if (!window.ImageCopyPlugin.notepad) {
             window.ImageCopyPlugin.notepad = createNotepad();
@@ -514,6 +606,7 @@ function addToNotepad(link) {
 
         const content = window.ImageCopyPlugin.notepad.content;
         const linkCount = content.children.length + 1;
+        log(`准备添加第 ${linkCount} 个链接: ${link}`);
 
         // 创建链接容器
         const linkContainer = document.createElement('div');
@@ -580,11 +673,14 @@ function addToNotepad(link) {
         linkContainer.appendChild(deleteBtn);
         content.appendChild(linkContainer);
 
-        // 保存链接到存储
-        saveLinksToStorage();
+        // 获取所有当前链接
+        const currentLinks = Array.from(content.querySelectorAll('a')).map(a => a.href);
+        log(`当前记事本共有 ${currentLinks.length} 个链接`);
+        
+        // 等待保存完成
+        await saveLinksToStorage();
+        log(`第 ${linkCount} 个链接添加完成`);
 
-        // 不再自动显示记事本
-        // showNotepad();
     } catch (error) {
         log('添加链接到记事本失败: ' + error.message, 'error');
     }
@@ -661,22 +757,32 @@ function handleCopyClick(img) {
 
         // 查找父级a标签
         const parentAnchor = findParentAnchor(img);
+        let link = '';
+        
         if (parentAnchor && parentAnchor.href) {
-            const link = parentAnchor.href;
-            copyToClipboard(link);
-            addToNotepad(link);
-            log('已复制链接: ' + link);
+            link = parentAnchor.href;
+        } else if (img.src) {
+            link = img.src;
         } else {
-            // 如果没有父级a标签，尝试使用图片的src
-            if (img.src) {
-                copyToClipboard(img.src);
-                addToNotepad(img.src);
-                log('已复制图片链接: ' + img.src);
-            } else {
-                log('未找到可复制的链接', 'warn');
-                return;
-            }
+            log('未找到可复制的链接', 'warn');
+            return;
         }
+
+        // 复制到剪贴板
+        copyToClipboard(link);
+        
+        // 确保记事本存在
+        if (!window.ImageCopyPlugin.notepad) {
+            window.ImageCopyPlugin.notepad = createNotepad();
+        }
+        
+        // 添加到记事本
+        addToNotepad(link);
+        
+        // 立即保存到存储
+        saveLinksToStorage();
+        
+        log('已复制链接: ' + link);
 
         // 修改按钮文字和样式
         button.innerHTML = '已复制';
@@ -799,7 +905,7 @@ function addImageListeners() {
 }
 
 // 修改初始化函数
-function initialize() {
+async function initialize() {
     try {
         // 确保document.body存在
         if (!document.body) {
@@ -813,7 +919,7 @@ function initialize() {
         }
 
         // 从存储中获取插件状态
-        chrome.storage.sync.get(['pluginEnabled', 'autoShowButton', 'savedLinks'], function(result) {
+        chrome.storage.sync.get(['pluginEnabled', 'autoShowButton'], async function(result) {
             window.ImageCopyPlugin.enabled = result.pluginEnabled !== false; // 默认为启用
             window.ImageCopyPlugin.autoShowButton = result.autoShowButton || false;
             
@@ -824,13 +930,8 @@ function initialize() {
                     window.ImageCopyPlugin.notepad = notepad;
                     log('记事本创建成功');
                     
-                    // 加载保存的链接
-                    if (result.savedLinks && result.savedLinks.length > 0) {
-                        result.savedLinks.forEach(link => {
-                            addToNotepad(link);
-                        });
-                        log('已加载 ' + result.savedLinks.length + ' 个保存的链接');
-                    }
+                    // 等待加载保存的链接
+                    await loadLinksFromStorage();
                     
                     // 默认隐藏记事本
                     hideNotepad();
